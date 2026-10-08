@@ -25,6 +25,7 @@ import io.github.marianciuc.streamingservice.payment.service.CardHolderService;
 import io.github.marianciuc.streamingservice.payment.service.UserService;
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 
@@ -77,11 +78,19 @@ public class CardHolderServiceImpl implements CardHolderService {
 
     @Override
     public CardHolderDto findCardHolder(UUID cardHolderId) {
+        UUID currentUserId = userService.extractUserIdFromAuth();
+        
         if (this.userService.hasAdminRoles()) {
-            UUID idToFetch = (cardHolderId != null) ? cardHolderId : userService.extractUserIdFromAuth();
+            // Admin can fetch any card holder
+            UUID idToFetch = (cardHolderId != null) ? cardHolderId : currentUserId;
             return CardHolderDto.toDto(this.findCardHolderEntity(idToFetch));
+        } else {
+            // Non-admin users can only access their own card holder information
+            if (cardHolderId != null && !cardHolderId.equals(currentUserId)) {
+                throw new AccessDeniedException("Cannot access other users' card holder information");
+            }
+            return CardHolderDto.toDto(this.findCardHolderEntity(currentUserId));
         }
-        return CardHolderDto.toDto(this.findCardHolderEntity(this.userService.extractUserIdFromAuth()));
     }
 
     @Override
@@ -103,8 +112,8 @@ public class CardHolderServiceImpl implements CardHolderService {
     public void updateCardHolder(UpdateCardHolderRequest request) {
         CardHolder cardHolder = this.findCardHolderEntity(((JWTUserPrincipal) SecurityContextHolder.getContext().getAuthentication().getPrincipal()).getUserId());
         if (!request.cardHolderName().isEmpty()) cardHolder.setCardHolderName(request.cardHolderName());
-        if (!request.cardHolderName().isEmpty()) cardHolder.setPhoneNumber(request.phoneNumber());
-        if (!request.cardHolderName().isEmpty()) cardHolder.setEmail(request.email());
+        if (!request.phoneNumber().isEmpty()) cardHolder.setPhoneNumber(request.phoneNumber());
+        if (!request.email().isEmpty()) cardHolder.setEmail(request.email());
         this.repository.save(cardHolder);
     }
 }
