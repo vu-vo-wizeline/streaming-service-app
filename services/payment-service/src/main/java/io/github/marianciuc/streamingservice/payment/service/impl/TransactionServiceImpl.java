@@ -109,12 +109,7 @@ public class TransactionServiceImpl implements TransactionService {
             Specification<Transaction> specification = TransactionSpecification.buildSpec(status, userId);
             Page<Transaction> transactionPage = repository.findAll(specification, pageable);
 
-            PaginationResponse<List<TransactionDto>> response = new PaginationResponse<>(
-                    transactionPage.getTotalPages(),
-                    transactionPage.getNumber(),
-                    transactionPage.getNumberOfElements(),
-                    transactionPage.getContent().stream().map(TransactionDto::toDto).toList()
-            );
+            return transactionPage.getContent().stream().map(TransactionDto::toDto).toList();
         }
         throw new AccessDeniedException("Access denied");
     }
