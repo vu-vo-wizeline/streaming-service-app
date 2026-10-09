@@ -2,7 +2,6 @@ package io.github.marianciuc.streamingservice.payment.config;
 
 
 import com.nimbusds.jose.JWSVerifier;
-import com.stripe.Stripe;
 import io.github.marianciuc.streamingservice.payment.security.AccessJWETokenStringDeserializer;
 import io.github.marianciuc.streamingservice.payment.security.JWTFilter;
 import lombok.RequiredArgsConstructor;
@@ -25,12 +24,10 @@ import org.springframework.security.web.csrf.CsrfFilter;
 public class SecurityConfig {
 
     @Bean
-    public SecurityFilterChain securityFilterChain(HttpSecurity http, JWSVerifier verifier, @Value("${stripe.api" +
-            ".key}") String key) throws Exception {
-        Stripe.apiKey = key;
+    public SecurityFilterChain securityFilterChain(HttpSecurity http, JWSVerifier verifier) throws Exception {
         http
                 .cors(AbstractHttpConfigurer::disable)
-                .csrf(AbstractHttpConfigurer::disable)
+                .csrf(csrf -> csrf.ignoringRequestMatchers("/api/v1/payments/webhook"))
                 .authorizeHttpRequests(auth -> auth.requestMatchers("/error").permitAll().anyRequest().authenticated())
                 .addFilterBefore(new JWTFilter(new AccessJWETokenStringDeserializer(verifier)),
                         CsrfFilter.class)
