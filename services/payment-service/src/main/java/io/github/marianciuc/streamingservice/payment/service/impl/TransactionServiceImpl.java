@@ -99,23 +99,23 @@ public class TransactionServiceImpl implements TransactionService {
         Sort.Direction sortDirection = Sort.Direction.fromString(sort);
         Pageable pageable = PageRequest.of(page, size, Sort.by(sortDirection, "amount"));
 
-        if (SecurityContextHolder.getContext().getAuthentication().getPrincipal() instanceof JWTUserPrincipal jwtUserPrincipal) {
-            if (jwtUserPrincipal.getAuthorities().stream()
-                    .anyMatch(auth -> auth.getAuthority().equals("ROLE_ADMIN"))) {
-                userId = (userId != null) ? userId : jwtUserPrincipal.getUserId();
-            } else {
-                userId = jwtUserPrincipal.getUserId();
-            }
-            Specification<Transaction> specification = TransactionSpecification.buildSpec(status, userId);
-            Page<Transaction> transactionPage = repository.findAll(specification, pageable);
-
-            PaginationResponse<List<TransactionDto>> response = new PaginationResponse<>(
-                    transactionPage.getTotalPages(),
-                    transactionPage.getNumber(),
-                    transactionPage.getNumberOfElements(),
-                    transactionPage.getContent().stream().map(TransactionDto::toDto).toList()
-            );
+        if (!(SecurityContextHolder.getContext().getAuthentication().getPrincipal() instanceof JWTUserPrincipal jwtUserPrincipal)) {
+            throw new AccessDeniedException("Access denied: Invalid authentication");
         }
-        throw new AccessDeniedException("Access denied");
+
+        // Determine which userId to use based on user role
+        if (jwtUserPrincipal.getAuthorities().stream()
+                .anyMatch(auth -> auth.getAuthority().equals("ROLE_ADMIN"))) {
+            // Admin can query any user's transactions or default to their own
+            userId = (userId != null) ? userId : jwtUserPrincipal.getUserId();
+        } else {
+            // Non-admin users can only query their own transactions
+            userId = jwtUserPrincipal.getUserId();
+        }
+
+        Specification<Transaction> specification = TransactionSpecification.buildSpec(status, userId);
+        Page<Transaction> transactionPage = repository.findAll(specification, pageable);
+
+        return transactionPage.getContent().stream().map(TransactionDto::toDto).toList();
     }
 }
