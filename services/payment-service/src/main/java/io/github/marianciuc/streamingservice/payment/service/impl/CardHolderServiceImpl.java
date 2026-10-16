@@ -78,19 +78,11 @@ public class CardHolderServiceImpl implements CardHolderService {
 
     @Override
     public CardHolderDto findCardHolder(UUID cardHolderId) {
-        UUID currentUserId = userService.extractUserIdFromAuth();
-        
         if (this.userService.hasAdminRoles()) {
-            // Admin can fetch any card holder
-            UUID idToFetch = (cardHolderId != null) ? cardHolderId : currentUserId;
+            UUID idToFetch = (cardHolderId != null) ? cardHolderId : userService.extractUserIdFromAuth();
             return CardHolderDto.toDto(this.findCardHolderEntity(idToFetch));
-        } else {
-            // Non-admin users can only access their own card holder information
-            if (cardHolderId != null && !cardHolderId.equals(currentUserId)) {
-                throw new AccessDeniedException("Cannot access other users' card holder information");
-            }
-            return CardHolderDto.toDto(this.findCardHolderEntity(currentUserId));
         }
+        return CardHolderDto.toDto(this.findCardHolderEntity(this.userService.extractUserIdFromAuth()));
     }
 
     @Override
@@ -110,10 +102,27 @@ public class CardHolderServiceImpl implements CardHolderService {
 
     @Override
     public void updateCardHolder(UpdateCardHolderRequest request) {
-        CardHolder cardHolder = this.findCardHolderEntity(((JWTUserPrincipal) SecurityContextHolder.getContext().getAuthentication().getPrincipal()).getUserId());
-        if (!request.cardHolderName().isEmpty()) cardHolder.setCardHolderName(request.cardHolderName());
-        if (!request.phoneNumber().isEmpty()) cardHolder.setPhoneNumber(request.phoneNumber());
-        if (!request.email().isEmpty()) cardHolder.setEmail(request.email());
+        // Extract authenticated user ID and enforce authorization
+        UUID authenticatedUserId = ((JWTUserPrincipal) SecurityContextHolder.getContext().getAuthentication().getPrincipal()).getUserId();
+        
+        // Verify that the request is for the authenticated user's card holder
+        if (!request.cardHolderId().equals(authenticatedUserId)) {
+            throw new AccessDeniedException("Cannot modify another user's card holder");
+        }
+        
+        CardHolder cardHolder = this.findCardHolderEntity(authenticatedUserId);
+        
+        // Fix logic error: check each field independently
+        if (!request.cardHolderName().isEmpty()) {
+            cardHolder.setCardHolderName(request.cardHolderName());
+        }
+        if (!request.phoneNumber().isEmpty()) {
+            cardHolder.setPhoneNumber(request.phoneNumber());
+        }
+        if (!request.email().isEmpty()) {
+            cardHolder.setEmail(request.email());
+        }
+        
         this.repository.save(cardHolder);
     }
 }

@@ -1,1 +1,63 @@
-package io.github.marianciuc.streamingservice.payment.controller;\n\nimport io.github.marianciuc.streamingservice.payment.dto.common.AddressDto;\nimport io.github.marianciuc.streamingservice.payment.dto.common.CardHolderDto;\nimport io.github.marianciuc.streamingservice.payment.dto.requests.CreateCartHolderRequest;\nimport io.github.marianciuc.streamingservice.payment.dto.requests.UpdateCardHolderRequest;\nimport io.github.marianciuc.streamingservice.payment.service.AddressService;\nimport io.github.marianciuc.streamingservice.payment.service.CardHolderService;\nimport io.github.marianciuc.streamingservice.payment.service.UserService;\nimport io.github.marianciuc.streamingservice.payment.security.SecurityUtils;\nimport jakarta.validation.Valid;\nimport lombok.RequiredArgsConstructor;\nimport lombok.extern.slf4j.Slf4j;\nimport org.springframework.http.ResponseEntity;\nimport org.springframework.security.access.AccessDeniedException;\nimport org.springframework.web.bind.annotation.*;\n\nimport java.util.UUID;\n\n@Slf4j\n@RestController\n@RequestMapping(\"/api/v1/payments\")\n@RequiredArgsConstructor\npublic class PaymentController {\n\n    private final CardHolderService cardHolderService;\n    private final AddressService addressService;\n\n    @PostMapping(\"/card-holder\")\n    public ResponseEntity<CardHolderDto> createCardHolder(@Valid @RequestBody CreateCartHolderRequest request) {\n        return ResponseEntity.ok(cardHolderService.createCardHolder(request));\n    }\n\n    @PutMapping(\"/card-holder\")\n    public ResponseEntity<Void> updateCardHolder(@RequestBody UpdateCardHolderRequest request) {\n        cardHolderService.updateCardHolder(request);\n        return ResponseEntity.ok().build();\n    }\n\n    @PutMapping(\"/address\")\n    public ResponseEntity<Void> updateAddress(@RequestBody AddressDto request) {\n        addressService.updateAddress(request);\n        return ResponseEntity.ok().build();\n    }\n\n    @PutMapping(\"/payment-method\")\n    public ResponseEntity<Void> updatePaymentMethod(@RequestParam(\"token\") String token) {\n        cardHolderService.updatePaymentMethod(token);\n        return ResponseEntity.ok().build();\n    }\n\n    @GetMapping(\"/card-holder\")\n    public ResponseEntity<CardHolderDto> getCardHolder(@RequestParam(value = \"cardHolderId\", required = false) UUID cardHolderId) {\n        UUID requestingUserId = SecurityUtils.extractJwtUserPrincipals().getId();\n        UUID idToFetch = (cardHolderId != null) ? cardHolderId : requestingUserId;\n        \n        // Verify ownership unless user is ADMIN\n        if (!cardHolderService.isCardHolderOwnedByUser(idToFetch, requestingUserId) && !hasAdminRole()) {\n            throw new AccessDeniedException(\"Access denied\");\n        }\n        return ResponseEntity.ok(cardHolderService.findCardHolder(idToFetch));\n    }\n    \n    private boolean hasAdminRole() {\n        return SecurityUtils.extractJwtUserPrincipals().getAuthorities()\n                .stream()\n                .anyMatch(auth -> auth.getAuthority().equals(\"ROLE_ADMIN\"));\n    }\n}\n
+package io.github.marianciuc.streamingservice.payment.controller;
+
+import io.github.marianciuc.streamingservice.payment.dto.common.AddressDto;
+import io.github.marianciuc.streamingservice.payment.dto.common.CardHolderDto;
+import io.github.marianciuc.streamingservice.payment.dto.requests.CreateCartHolderRequest;
+import io.github.marianciuc.streamingservice.payment.dto.requests.UpdateCardHolderRequest;
+import io.github.marianciuc.streamingservice.payment.service.AddressService;
+import io.github.marianciuc.streamingservice.payment.service.CardHolderService;
+import io.github.marianciuc.streamingservice.payment.service.UserService;
+import jakarta.validation.Valid;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.AccessDeniedException;
+import org.springframework.web.bind.annotation.*;
+
+import java.util.UUID;
+
+@Slf4j
+@RestController
+@RequestMapping("/api/v1/payments")
+@RequiredArgsConstructor
+public class PaymentController {
+
+    private final CardHolderService cardHolderService;
+    private final AddressService addressService;
+    private final UserService userService;
+
+    @PostMapping("/card-holder")
+    public ResponseEntity<CardHolderDto> createCardHolder(@Valid @RequestBody CreateCartHolderRequest request) {
+        return ResponseEntity.ok(cardHolderService.createCardHolder(request));
+    }
+
+    @PutMapping("/card-holder")
+    public ResponseEntity<Void> updateCardHolder(@RequestBody UpdateCardHolderRequest request) {
+        cardHolderService.updateCardHolder(request);
+        return ResponseEntity.ok().build();
+    }
+
+    @PutMapping("/address")
+    public ResponseEntity<Void> updateAddress(@RequestBody AddressDto request) {
+        addressService.updateAddress(request);
+        return ResponseEntity.ok().build();
+    }
+
+    @PutMapping("/payment-method")
+    public ResponseEntity<Void> updatePaymentMethod(@RequestParam("token") String token) {
+        cardHolderService.updatePaymentMethod(token);
+        return ResponseEntity.ok().build();
+    }
+
+    @GetMapping("/card-holder")
+    public ResponseEntity<CardHolderDto> getCardHolder(@RequestParam(value = "cardHolderId", required = false) UUID cardHolderId) {
+        // Enforce ownership verification: only allow access to own card holder or admin access
+        UUID requestingUserId = userService.extractUserIdFromAuth();
+        if (cardHolderId != null && !cardHolderId.equals(requestingUserId) && !userService.hasAdminRoles()) {
+            throw new AccessDeniedException("Access denied");
+        }
+        // If no cardHolderId provided, default to requesting user's card holder
+        UUID idToFetch = (cardHolderId != null) ? cardHolderId : requestingUserId;
+        return ResponseEntity.ok(cardHolderService.findCardHolder(idToFetch));
+    }
+}
