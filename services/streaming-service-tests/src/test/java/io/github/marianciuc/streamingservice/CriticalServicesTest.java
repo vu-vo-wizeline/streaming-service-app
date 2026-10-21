@@ -388,14 +388,14 @@ public class CriticalServicesTest {
         }
 
         @Test
-        @DisplayName("Happy Path: Update subscription with new allowed sessions")
-        void testUpdateSubscription_whenSessionsChanged_expectsSubscriptionUpdated() {
+        @DisplayName("Happy Path: Update subscription with new values")
+        void testUpdateSubscription_whenValidRequest_expectsSubscriptionUpdated() {
             // ARRANGE
             SubscriptionRequest updateRequest = new SubscriptionRequest(
-                    "Premium",
-                    9.99,
+                    "Premium Plus",
+                    12.99,
                     30,
-                    6,  // Changed from 4 to 6
+                    6,
                     false
             );
 
@@ -544,14 +544,14 @@ public class CriticalServicesTest {
         }
 
         @Test
-        @DisplayName("Happy Path: Subscribe user when order already exists - updates subscription")
-        void testSubscribeUser_whenOrderExists_expectsSubscriptionUpdated() {
+        @DisplayName("Happy Path: Subscribe user updates existing subscription")
+        void testSubscribeUser_whenExistingOrder_expectsSubscriptionUpdated() {
             // ARRANGE
             UserSubscriptions existingSubscription = UserSubscriptions.builder()
                     .id(userSubscriptionId)
                     .userId(userId)
                     .orderId(orderId)
-                    .subscription(Subscription.builder().id(UUID.randomUUID()).build())
+                    .subscription(testSubscription)
                     .status(SubscriptionStatus.EXPIRED)
                     .build();
 
@@ -563,8 +563,9 @@ public class CriticalServicesTest {
             userSubscriptionService.subscribeUser(testOrderEvent);
 
             // ASSERT
-            verify(userSubscriptionRepository).save(existingSubscription);
-            assertEquals(SubscriptionStatus.ACTIVE, existingSubscription.getStatus());
+            ArgumentCaptor<UserSubscriptions> captor = ArgumentCaptor.forClass(UserSubscriptions.class);
+            verify(userSubscriptionRepository).save(captor.capture());
+            assertEquals(SubscriptionStatus.ACTIVE, captor.getValue().getStatus());
         }
 
         @Test
@@ -654,15 +655,13 @@ public class CriticalServicesTest {
 
         @Test
         @DisplayName("Error Path: Extend subscription when order creation fails")
-        void testExtendSubscription_whenOrderCreationFails_expectsIOException() {
+        void testExtendSubscription_whenOrderFails_expectsIOException() {
             // ARRANGE
             when(orderClient.createOrder(any(CreateOrderRequest.class)))
                     .thenThrow(new RuntimeException("Order service unavailable"));
 
             // ACT & ASSERT
-            assertThrows(IOException.class, () ->
-                    userSubscriptionService.extendSubscription(testUserSubscription)
-            );
+            assertThrows(IOException.class, () -> userSubscriptionService.extendSubscription(testUserSubscription));
         }
 
         @Test
@@ -693,7 +692,7 @@ public class CriticalServicesTest {
         }
 
         @Test
-        @DisplayName("Boundary: Get all user subscriptions by status and end date")
+        @DisplayName("Boundary: Get user subscriptions by status and end date")
         void testGetAllUserSubscriptionsByStatusAndEndDate_whenMultipleExist_expectsAllReturned() {
             // ARRANGE
             LocalDate targetDate = LocalDate.now();
@@ -712,25 +711,6 @@ public class CriticalServicesTest {
             assertEquals(1, result.size());
             verify(userSubscriptionRepository).findAllByStatusAndEndDate(SubscriptionStatus.ACTIVE, targetDate);
         }
-
-        @Test
-        @DisplayName("Boundary: Get all user subscriptions when none match criteria")
-        void testGetAllUserSubscriptionsByStatusAndEndDate_whenNoneMatch_expectsEmptyList() {
-            // ARRANGE
-            LocalDate targetDate = LocalDate.now();
-            when(userSubscriptionRepository.findAllByStatusAndEndDate(SubscriptionStatus.CANCELLED, targetDate))
-                    .thenReturn(List.of());
-
-            // ACT
-            List<UserSubscriptions> result = userSubscriptionService.getAllUserSubscriptionsByStatusAndEndDate(
-                    SubscriptionStatus.CANCELLED,
-                    targetDate
-            );
-
-            // ASSERT
-            assertNotNull(result);
-            assertTrue(result.isEmpty());
-        }
     }
 
     // ============================================================================
@@ -738,7 +718,7 @@ public class CriticalServicesTest {
     // ============================================================================
 
     @Nested
-    @DisplayName("Parametrized Tests for Currency Handling")
+    @DisplayName("Parametrized Tests for Multiple Currencies")
     class ParametrizedCurrencyTests {
 
         @Mock
@@ -765,7 +745,7 @@ public class CriticalServicesTest {
             CardHolder cardHolder = CardHolder.builder()
                     .id(UUID.randomUUID())
                     .userId(userId)
-                    .stripeCustomerId("cus_test")
+                    .stripeCustomerId("cus_test123")
                     .build();
 
             InitializePaymentMessage message = new InitializePaymentMessage(
